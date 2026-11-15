@@ -43,13 +43,11 @@
 #error "V platformio.ini musi byt build_flags = -DELEGANTOTA_USE_ASYNC_WEBSERVER=1"
 #endif
 
-#define FW_VERSION "2.4.0"
+#define FW_VERSION "2.5.0"
 
 // ============ HARDWARE ============
 #define SDA_PIN 8
 #define SCL_PIN 9
-
-#define PIN_PWR  7     // HIGH = VN zdroj zapnutý
 
 // Výchozí zapojení displeje (platí i po továrním nastavení). Mění se ve webu (Zapojení desky).
 // CLK, DIN i OE vedou přes invertující tranzistor (OE = PWM jasu).
@@ -57,12 +55,13 @@ static constexpr uint8_t DEF_PIN_CLK  = 1;
 static constexpr uint8_t DEF_PIN_DIN1 = 3;     // driver digitronů 1–3
 static constexpr uint8_t DEF_PIN_DIN2 = 2;     // driver digitronů 4–6 (jen paralelně)
 static constexpr uint8_t DEF_PIN_OE   = 0;
+static constexpr uint8_t DEF_PIN_PWR  = 7;     // VN zdroj, HIGH = zapnutý
 static constexpr uint8_t PIN_NONE     = 0xFF;  // nezapojeno
 
-// GPIO vyvedené na ESP32-C3 SuperMini, které smí displej použít.
-// Ne: 7 (VN zdroj), 11–17 (SPI flash, zápis by shodil čip), 18/19 (USB).
+// GPIO vyvedené na ESP32-C3 SuperMini, které smí displej a VN zdroj použít.
+// Ne: 11–17 (SPI flash, zápis by shodil čip), 18/19 (USB).
 // 8/9 jen bez RTC – jinak patří I2C. (Na SuperMini je na 8 modrá LED a na 9 tlačítko BOOT.)
-static const uint8_t GPIO_OK[] = {0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 20, 21};
+static const uint8_t GPIO_OK[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 21};
 static constexpr int GPIO_OK_N = sizeof(GPIO_OK);
 static bool i2cBusy = true;        // RTC zapnuté -> GPIO 8/9 drží I2C (platí od startu do restartu)
 
@@ -78,9 +77,9 @@ static bool gpioAllowed(long p) {
 enum Chain : uint8_t { CHAIN_PARALLEL = 0, CHAIN_SERIAL = 1 };
 
 // Každý signál na jiném povoleném GPIO. din2 se kontroluje jen paralelně;
-// oe/str = -1 nebo PIN_NONE: nezapojené.
-static bool pinsValid(long clk, long din1, long din2, long oe, long str, uint8_t chain) {
-  long used[5];
+// oe/str/pwr = -1 nebo PIN_NONE: nezapojené.
+static bool pinsValid(long clk, long din1, long din2, long oe, long str, long pwr, uint8_t chain) {
+  long used[6];
   int n = 0;
   auto add = [&](long p) {
     if (p < 0 || p == PIN_NONE) return true;   // nepovinný signál nezapojený
@@ -91,7 +90,7 @@ static bool pinsValid(long clk, long din1, long din2, long oe, long str, uint8_t
   };
   if (!gpioAllowed(clk) || !gpioAllowed(din1)) return false;
   if (chain == CHAIN_PARALLEL && !gpioAllowed(din2)) return false;
-  return add(clk) && add(din1) && (chain == CHAIN_SERIAL || add(din2)) && add(oe) && add(str);
+  return add(clk) && add(din1) && (chain == CHAIN_SERIAL || add(din2)) && add(oe) && add(str) && add(pwr);
 }
 
 // STR (strobe / latch HV5222): po nasunutí všech bitů je krátký pulz převezme na výstupy najednou,
@@ -166,6 +165,7 @@ struct Settings {
   uint8_t  chainFirst = 0;         // do série: 1. driver za ESP řídí digitrony 1–3 (0) nebo 4–6 (1)
   uint8_t  pinStr  = PIN_NONE;     // STR (latch), PIN_NONE = nezapojený
   bool     strHigh = true;         // aktivní (propustná) úroveň STR na pinu ESP: HIGH / LOW
+  uint8_t  pinPwr  = DEF_PIN_PWR;  // VN zdroj, PIN_NONE = nezapojený
   bool     rtcOn   = true;         // osazený DS3231 (změna platí po restartu)
   String   otaUser = "";
   String   otaPass = "";
@@ -450,12 +450,21 @@ void applyBrightness(uint8_t pct) {
 }
 
 static int hvApplied = -1;
+static uint8_t gPwr = PIN_NONE;
 
 void applyHv(bool on) {
   hvOn = on;
   if (hvApplied == (int)on) return;
   hvApplied = on;
-  digitalWrite(PIN_PWR, on ? HIGH : LOW);
+  if (gPwr != PIN_NONE) digitalWrite(gPwr, on ? HIGH : LOW);
+}
+
+// Přesune VN zdroj na jiný pin (PIN_NONE = nezapojený). Starý pin se vypne a uvolní.
+static void setPwrPin(uint8_t p) {
+  if (p == gPwr) return;
+  if (gPwr != PIN_NONE) { digitalWrite(gPwr, LOW); pinMode(gPwr, INPUT); }
+  gPwr = p;
+  if (p != PIN_NONE) { pinMode(p, OUTPUT); digitalWrite(p, hvApplied == 1 ? HIGH : LOW); }
 }
 
 // =====================================================================
@@ -493,6 +502,7 @@ void loadSettings() {
   s.chainFirst     = prefs.getUChar("chfirst", s.chainFirst);
   s.pinStr         = prefs.getUChar("pstr", s.pinStr);
   s.strHigh        = prefs.getBool("strhi", s.strHigh);
+  s.pinPwr         = prefs.getUChar("ppwr", s.pinPwr);
   s.rtcOn          = prefs.getBool("rtcon", s.rtcOn);
   s.otaUser        = prefs.getString("otauser", s.otaUser);
   s.otaPass        = prefs.getString("otapass", s.otaPass);
@@ -516,9 +526,9 @@ void loadSettings() {
   if (s.chain > CHAIN_SERIAL) s.chain = CHAIN_PARALLEL;
   s.chainFirst  = s.chainFirst ? 1 : 0;
   i2cBusy = s.rtcOn;                       // volí se jen při startu
-  if (!pinsValid(s.pinClk, s.pinDin1, s.pinDin2, s.pinOe, s.pinStr, s.chain)) {
+  if (!pinsValid(s.pinClk, s.pinDin1, s.pinDin2, s.pinOe, s.pinStr, s.pinPwr, s.chain)) {
     s.pinClk = DEF_PIN_CLK; s.pinDin1 = DEF_PIN_DIN1; s.pinDin2 = DEF_PIN_DIN2; s.pinOe = DEF_PIN_OE;
-    s.pinStr = PIN_NONE; s.chain = CHAIN_PARALLEL;
+    s.pinStr = PIN_NONE; s.pinPwr = DEF_PIN_PWR; s.chain = CHAIN_PARALLEL;
   }
 
   CfgLock l;
@@ -559,6 +569,7 @@ void saveSettings(const Settings& s) {
   prefs.putUChar("chfirst", s.chainFirst);
   prefs.putUChar("pstr", s.pinStr);
   prefs.putBool("strhi", s.strHigh);
+  prefs.putUChar("ppwr", s.pinPwr);
   prefs.putBool("rtcon", s.rtcOn);
   prefs.putString("otauser", s.otaUser);
   prefs.putString("otapass", s.otaPass);
@@ -1260,7 +1271,7 @@ void scanCommand(uint8_t cmd) {
     const uint8_t ph = reqScanPhase == SP_OE || reqScanPhase == SP_STR ? reqScanPhase : SP_CLK;
     const uint8_t keepStr = ph == SP_STR ? PIN_NONE : cur.pinStr;   // uložený STR se při hledání 1–4 nezkouší
     scan.nc = 0;
-    for (uint8_t g : GPIO_OK) if ((reqScanMask >> g) & 1UL && gpioAllowed(g) && g != keepStr) scanAdd(g);
+    for (uint8_t g : GPIO_OK) if ((reqScanMask >> g) & 1UL && gpioAllowed(g) && g != keepStr && g != cur.pinPwr) scanAdd(g);
     scan.clk = scan.din1 = scan.din2 = scan.oe = scan.str = PIN_NONE;
     scan.strFlip = false;
     if (ph != SP_CLK) {                            // CLK a DIN (a pro STR i OE) známé z nastavení
@@ -1467,6 +1478,7 @@ String configJson() {
   j += ",\"chfirst\":" + String(s.chainFirst);
   j += ",\"pstr\":" + String(pinJ(s.pinStr));
   j += ",\"strhi\":" + String(s.strHigh ? "true" : "false");
+  j += ",\"ppwr\":" + String(pinJ(s.pinPwr));
   j += ",\"rtcon\":" + String(s.rtcOn ? "true" : "false");
   j += ",\"gpios\":[";
   for (int i = 0; i < GPIO_OK_N; i++) {
@@ -1517,18 +1529,20 @@ void handleConfigPost(AsyncWebServerRequest* r) {
     if (argInt(r, "srpulse", iv, 6, 25)) s.srPulse = iv;
     if (argBool(r, "srblank", bv)) s.srBlank = bv;
     {
-      long pc = s.pinClk, p1 = s.pinDin1, p2 = s.pinDin2, po = pinJ(s.pinOe), ps = pinJ(s.pinStr), ch = s.chain;
+      long pc = s.pinClk, p1 = s.pinDin1, p2 = s.pinDin2, po = pinJ(s.pinOe), ps = pinJ(s.pinStr), pp = pinJ(s.pinPwr), ch = s.chain;
       bool given = false;
       if (argInt(r, "pstr", iv, -1, 99))  { ps = iv; given = true; }
       if (argInt(r, "pclk", iv, -1, 99))  { pc = iv; given = true; }
       if (argInt(r, "pdin1", iv, -1, 99)) { p1 = iv; given = true; }
       if (argInt(r, "pdin2", iv, -1, 99)) { p2 = iv; given = true; }
       if (argInt(r, "poe", iv, -1, 99))   { po = iv; given = true; }
+      if (argInt(r, "ppwr", iv, -1, 99))  { pp = iv; given = true; }
       if (argInt(r, "chain", iv, 0, 1))   { ch = iv; given = true; }
       if (given) {
-        if (pinsValid(pc, p1, p2, po, ps, ch)) {
+        if (pinsValid(pc, p1, p2, po, ps, pp, ch)) {
           s.pinClk = pc; s.pinDin1 = p1; s.pinOe = po < 0 ? PIN_NONE : po; s.chain = ch;
           s.pinStr = ps < 0 ? PIN_NONE : ps;
+          s.pinPwr = pp < 0 ? PIN_NONE : pp;
           if (gpioAllowed(p2)) s.pinDin2 = p2;     // do série se DIN2 nepoužívá, ale pamatuje
         } else {
           err = "Neplatné zapojení: každý signál na jiném povoleném GPIO";
@@ -1538,7 +1552,8 @@ void handleConfigPost(AsyncWebServerRequest* r) {
     if (argInt(r, "chfirst", iv, 0, 1)) s.chainFirst = iv;
     if (argBool(r, "strhi", bv)) s.strHigh = bv;
     if (argBool(r, "rtcon", bv)) {
-      const uint8_t ps[5] = {s.pinClk, s.pinDin1, s.chain == CHAIN_PARALLEL ? s.pinDin2 : PIN_NONE, s.pinOe, s.pinStr};
+      const uint8_t ps[6] = {s.pinClk, s.pinDin1, s.chain == CHAIN_PARALLEL ? s.pinDin2 : PIN_NONE, s.pinOe, s.pinStr,
+                             s.pinPwr};
       bool i2cUsed = false;
       for (uint8_t q : ps) if (q == SDA_PIN || q == SCL_PIN) i2cUsed = true;
       if (bv && i2cUsed) err = "RTC potřebuje GPIO 8 a 9 – nejdřív je uvolni v zapojení displeje";
@@ -1701,7 +1716,7 @@ void setupWeb() {
       { CfgLock l; s = cfg; }
       int n = 0;
       for (uint8_t g : GPIO_OK) {
-        if (!((mask >> g) & 1UL)) continue;
+        if (!((mask >> g) & 1UL) || g == s.pinPwr) continue;   // VN zdroj se nezkouší
         const bool known = g == s.pinClk || g == s.pinDin1 || (s.chain == CHAIN_PARALLEL && g == s.pinDin2);
         if (ph == SP_OE && (known || g == s.pinStr)) continue;
         if (ph == SP_STR && (known || g == s.pinOe)) continue;
@@ -1770,6 +1785,7 @@ void applyConfigChanges() {
                       prev.pinOe != cur.pinOe || prev.chain != cur.chain || prev.pinStr != cur.pinStr ||
                       prev.strHigh != cur.strHigh))
     applyDisplayCfg(cur);
+  if (prev.pinPwr != cur.pinPwr) setPwrPin(cur.pinPwr);
   if (disp::pulseUs != cur.srPulse || disp::blankOe != cur.srBlank) {
     disp::pulseUs = cur.srPulse; disp::blankOe = cur.srBlank;
     disp::hasFrame = false;                // pošli snímek hned novým způsobem
@@ -1926,12 +1942,12 @@ void updateOutputs() {
 //  SETUP & LOOP
 // =====================================================================
 void setup() {
-  pinMode(PIN_PWR, OUTPUT);
-  digitalWrite(PIN_PWR, LOW);
-  // zapojení displeje je v nastavení -> načíst hned a displej co nejdřív do klidového stavu
+  // zapojení displeje i VN zdroje je v nastavení -> načíst hned, VN vypnout a displej do klidového stavu
   cfgMutex = xSemaphoreCreateMutex();
   loadSettings();
   { CfgLock l; cur = cfg; }
+  hvApplied = 0;
+  setPwrPin(cur.pinPwr);                   // VN vypnutý
   disp::pulseUs = cur.srPulse; disp::blankOe = cur.srBlank;
   pwmInit();
   applyBrightness(0);                      // jas 0 dřív, než se PWM připojí na OE
