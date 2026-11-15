@@ -311,7 +311,8 @@ details[open] summary::before{transform:rotate(90deg)}
     <div id="din2Wrap"><label>DIN2 (digitrony 4–6)</label><select id="pdin2"></select></div>
     <div><label>STR (latch)</label><select id="pstr"></select></div>
     <div><label>STR aktivní v</label><select id="strhi"><option value="1">HIGH</option><option value="0">LOW</option></select></div>
-    <div><label>VN zdroj (HIGH = zap.)</label><select id="ppwr"></select></div>
+    <div><label>VN zdroj</label><select id="ppwr"></select></div>
+    <div><label>VN zapnutý při</label><select id="pwrhi"><option value="1">HIGH</option><option value="0">LOW</option></select></div>
   </div>
   <button id="bPins">Uložit zapojení</button>
   <div class="muted">Projeví se ihned. Když do série ukazují digitrony 456123, přepni „První driver za ESP řídí“.
@@ -587,10 +588,10 @@ function fillPins(){
   ["pclk","pdin1","pdin2"].forEach(id=>$(id).innerHTML=opt);
   $("poe").innerHTML=$("pstr").innerHTML=$("ppwr").innerHTML='<option value="-1">nezapojeno</option>'+opt;
   $("pclk").value=cfg.pclk;$("pdin1").value=cfg.pdin1;$("pdin2").value=cfg.pdin2;$("poe").value=cfg.poe;
-  $("pstr").value=cfg.pstr;$("ppwr").value=cfg.ppwr;$("strhi").value=cfg.strhi?"1":"0";$("rtcon").checked=cfg.rtcon;
+  $("pstr").value=cfg.pstr;$("ppwr").value=cfg.ppwr;$("pwrhi").value=cfg.pwrhi?"1":"0";$("strhi").value=cfg.strhi?"1":"0";$("rtcon").checked=cfg.rtcon;
   $("chain").value=cfg.chain;$("chfirst").value=cfg.chfirst;chainUi();
   const ser=cfg.chain===1;
-  $("pinState").textContent=(ser?"do série · ":"")+"CLK "+cfg.pclk+" · DIN "+cfg.pdin1+(ser?"":"/"+cfg.pdin2)+" · OE "+(cfg.poe<0?"–":cfg.poe)+(cfg.pstr<0?"":" · STR "+cfg.pstr)+" · VN "+(cfg.ppwr<0?"–":cfg.ppwr);
+  $("pinState").textContent=(ser?"do série · ":"")+"CLK "+cfg.pclk+" · DIN "+cfg.pdin1+(ser?"":"/"+cfg.pdin2)+" · OE "+(cfg.poe<0?"–":cfg.poe)+(cfg.pstr<0?"":" · STR "+cfg.pstr)+" · VN "+(cfg.ppwr<0?"–":cfg.ppwr+(cfg.pwrhi?"":" (LOW)"));
   if(!$("scanPins").children.length)
     $("scanPins").innerHTML=g.map(x=>`<label><input type="checkbox" value="${x}"${x===cfg.ppwr?"":" checked"}>${x}</label>`).join("");
 }
@@ -599,7 +600,7 @@ $("bPins").onclick=e=>act(e.target,async()=>{
   const ser=$("chain").value==="1", v=["pclk","pdin1"].concat(ser?[]:["pdin2"]).map(id=>$(id).value);
   ["poe","pstr","ppwr"].forEach(id=>{if($(id).value!=="-1") v.push($(id).value)});
   if(new Set(v).size!==v.length) throw new Error("Každý signál musí mít jiný pin");
-  await post("/api/config",{chain:$("chain").value,chfirst:$("chfirst").value,pclk:$("pclk").value,pdin1:$("pdin1").value,pdin2:$("pdin2").value,poe:$("poe").value,pstr:$("pstr").value,ppwr:$("ppwr").value,strhi:$("strhi").value});
+  await post("/api/config",{chain:$("chain").value,chfirst:$("chfirst").value,pclk:$("pclk").value,pdin1:$("pdin1").value,pdin2:$("pdin2").value,poe:$("poe").value,pstr:$("pstr").value,ppwr:$("ppwr").value,pwrhi:$("pwrhi").value,strhi:$("strhi").value});
   await loadCfg();
 },"Zapojení uloženo");
 // pořadí driverů v sérii se dá přepnout i během hledání

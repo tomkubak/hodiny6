@@ -66,7 +66,7 @@ Výchozí zapojení (platí i po továrním nastavení):
 | DIN2 | 2 | driver digitronů 4–6 (jen paralelně) |
 | OE (jas) | 0 | PWM, přes invertující tranzistor |
 | STR (latch) | – | volitelný, výchozí nezapojený |
-| VN zdroj | 7 | HIGH = zapnutý, volitelný (i „nezapojeno“) |
+| VN zdroj | 7 | volitelný pin (i „nezapojeno“) i polarita, výchozí HIGH = zapnutý |
 | RTC SDA / SCL | 8 / 9 | DS3231 (pevné; bez RTC volné pro displej) |
 
 Piny displeje i VN zdroje jdou změnit v kartě **Zapojení desky** (GPIO 0–7, 10, 20, 21; bez RTC i 8 a 9).

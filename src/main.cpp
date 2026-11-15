@@ -43,7 +43,7 @@
 #error "V platformio.ini musi byt build_flags = -DELEGANTOTA_USE_ASYNC_WEBSERVER=1"
 #endif
 
-#define FW_VERSION "2.5.0"
+#define FW_VERSION "2.5.1"
 
 // ============ HARDWARE ============
 #define SDA_PIN 8
@@ -55,7 +55,7 @@ static constexpr uint8_t DEF_PIN_CLK  = 1;
 static constexpr uint8_t DEF_PIN_DIN1 = 3;     // driver digitronů 1–3
 static constexpr uint8_t DEF_PIN_DIN2 = 2;     // driver digitronů 4–6 (jen paralelně)
 static constexpr uint8_t DEF_PIN_OE   = 0;
-static constexpr uint8_t DEF_PIN_PWR  = 7;     // VN zdroj, HIGH = zapnutý
+static constexpr uint8_t DEF_PIN_PWR  = 7;     // VN zdroj (výchozí HIGH = zapnutý)
 static constexpr uint8_t PIN_NONE     = 0xFF;  // nezapojeno
 
 // GPIO vyvedené na ESP32-C3 SuperMini, které smí displej a VN zdroj použít.
@@ -166,6 +166,7 @@ struct Settings {
   uint8_t  pinStr  = PIN_NONE;     // STR (latch), PIN_NONE = nezapojený
   bool     strHigh = true;         // aktivní (propustná) úroveň STR na pinu ESP: HIGH / LOW
   uint8_t  pinPwr  = DEF_PIN_PWR;  // VN zdroj, PIN_NONE = nezapojený
+  bool     pwrHigh = true;         // úroveň, která VN zdroj zapíná: HIGH / LOW
   bool     rtcOn   = true;         // osazený DS3231 (změna platí po restartu)
   String   otaUser = "";
   String   otaPass = "";
@@ -451,20 +452,26 @@ void applyBrightness(uint8_t pct) {
 
 static int hvApplied = -1;
 static uint8_t gPwr = PIN_NONE;
+static bool    gPwrHigh = true;
+
+static void pwrWrite(bool on) {
+  if (gPwr != PIN_NONE) digitalWrite(gPwr, on == gPwrHigh ? HIGH : LOW);
+}
 
 void applyHv(bool on) {
   hvOn = on;
   if (hvApplied == (int)on) return;
   hvApplied = on;
-  if (gPwr != PIN_NONE) digitalWrite(gPwr, on ? HIGH : LOW);
+  pwrWrite(on);
 }
 
-// Přesune VN zdroj na jiný pin (PIN_NONE = nezapojený). Starý pin se vypne a uvolní.
-static void setPwrPin(uint8_t p) {
-  if (p == gPwr) return;
-  if (gPwr != PIN_NONE) { digitalWrite(gPwr, LOW); pinMode(gPwr, INPUT); }
-  gPwr = p;
-  if (p != PIN_NONE) { pinMode(p, OUTPUT); digitalWrite(p, hvApplied == 1 ? HIGH : LOW); }
+// Přesune VN zdroj na jiný pin (PIN_NONE = nezapojený) nebo změní jeho polaritu.
+// Starý pin se vypne a uvolní, nový převezme aktuální stav.
+static void setPwrPin(uint8_t p, bool high) {
+  if (p == gPwr && high == gPwrHigh) return;
+  if (gPwr != PIN_NONE && p != gPwr) { pwrWrite(false); pinMode(gPwr, INPUT); }
+  gPwr = p; gPwrHigh = high;
+  if (p != PIN_NONE) { pinMode(p, OUTPUT); pwrWrite(hvApplied == 1); }
 }
 
 // =====================================================================
@@ -503,6 +510,7 @@ void loadSettings() {
   s.pinStr         = prefs.getUChar("pstr", s.pinStr);
   s.strHigh        = prefs.getBool("strhi", s.strHigh);
   s.pinPwr         = prefs.getUChar("ppwr", s.pinPwr);
+  s.pwrHigh        = prefs.getBool("pwrhi", s.pwrHigh);
   s.rtcOn          = prefs.getBool("rtcon", s.rtcOn);
   s.otaUser        = prefs.getString("otauser", s.otaUser);
   s.otaPass        = prefs.getString("otapass", s.otaPass);
@@ -570,6 +578,7 @@ void saveSettings(const Settings& s) {
   prefs.putUChar("pstr", s.pinStr);
   prefs.putBool("strhi", s.strHigh);
   prefs.putUChar("ppwr", s.pinPwr);
+  prefs.putBool("pwrhi", s.pwrHigh);
   prefs.putBool("rtcon", s.rtcOn);
   prefs.putString("otauser", s.otaUser);
   prefs.putString("otapass", s.otaPass);
@@ -1479,6 +1488,7 @@ String configJson() {
   j += ",\"pstr\":" + String(pinJ(s.pinStr));
   j += ",\"strhi\":" + String(s.strHigh ? "true" : "false");
   j += ",\"ppwr\":" + String(pinJ(s.pinPwr));
+  j += ",\"pwrhi\":" + String(s.pwrHigh ? "true" : "false");
   j += ",\"rtcon\":" + String(s.rtcOn ? "true" : "false");
   j += ",\"gpios\":[";
   for (int i = 0; i < GPIO_OK_N; i++) {
@@ -1551,6 +1561,7 @@ void handleConfigPost(AsyncWebServerRequest* r) {
     }
     if (argInt(r, "chfirst", iv, 0, 1)) s.chainFirst = iv;
     if (argBool(r, "strhi", bv)) s.strHigh = bv;
+    if (argBool(r, "pwrhi", bv)) s.pwrHigh = bv;
     if (argBool(r, "rtcon", bv)) {
       const uint8_t ps[6] = {s.pinClk, s.pinDin1, s.chain == CHAIN_PARALLEL ? s.pinDin2 : PIN_NONE, s.pinOe, s.pinStr,
                              s.pinPwr};
@@ -1785,7 +1796,7 @@ void applyConfigChanges() {
                       prev.pinOe != cur.pinOe || prev.chain != cur.chain || prev.pinStr != cur.pinStr ||
                       prev.strHigh != cur.strHigh))
     applyDisplayCfg(cur);
-  if (prev.pinPwr != cur.pinPwr) setPwrPin(cur.pinPwr);
+  if (prev.pinPwr != cur.pinPwr || prev.pwrHigh != cur.pwrHigh) setPwrPin(cur.pinPwr, cur.pwrHigh);
   if (disp::pulseUs != cur.srPulse || disp::blankOe != cur.srBlank) {
     disp::pulseUs = cur.srPulse; disp::blankOe = cur.srBlank;
     disp::hasFrame = false;                // pošli snímek hned novým způsobem
@@ -1947,7 +1958,7 @@ void setup() {
   loadSettings();
   { CfgLock l; cur = cfg; }
   hvApplied = 0;
-  setPwrPin(cur.pinPwr);                   // VN vypnutý
+  setPwrPin(cur.pinPwr, cur.pwrHigh);      // VN vypnutý
   disp::pulseUs = cur.srPulse; disp::blankOe = cur.srBlank;
   pwmInit();
   applyBrightness(0);                      // jas 0 dřív, než se PWM připojí na OE
