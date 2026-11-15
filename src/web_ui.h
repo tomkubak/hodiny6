@@ -348,6 +348,25 @@ details[open] summary::before{transform:rotate(90deg)}
       <button class="danger" id="bSStop">Ukončit hledání</button>
     </div>
   </details>
+  <details id="testBox">
+    <summary>Test digitronů</summary>
+    <div class="muted">„Všechny číslice“ ukáže na všech digitronech postupně 0–9. „Výstupy driverů“ rozsvítí vždy jen
+      jeden výstup HV5222 (0–31 driver digitronů 1–3, 32–63 driver 4–6) – uvidíš, kam na desce vede.
+      Jas je během testu aspoň 30 %, VN zdroj zapnutý. Test sám skončí po 30 minutách.</div>
+    <div class="row">
+      <button class="sec" id="bTDig">Všechny číslice 0–9</button>
+      <button class="sec" id="bTOut">Výstupy driverů</button>
+    </div>
+    <div id="testRun" hidden>
+      <div class="scanInfo" id="testInfo"></div>
+      <div class="row">
+        <button class="sec" id="bTPrev">◀ Zpět</button>
+        <button class="sec" id="bTPause">Pauza</button>
+        <button class="sec" id="bTNext">Další ▶</button>
+      </div>
+      <button class="danger" id="bTStop">Ukončit test</button>
+    </div>
+  </details>
 </div>
 
 <div class="card">
@@ -649,8 +668,36 @@ function renderScan(){
     $("bSNoOe").textContent=sc.phase===5?"STR nenalezen – uložit bez STR":"OE nenalezeno – uložit bez OE";
   }else if(scanWas) loadCfg().catch(()=>{});
   scanWas=sc.phase;
+  renderTest();
 }
-setInterval(()=>{if(st.scan&&st.scan.phase)poll()},600);   // během hledání častěji
+
+// ---------- test digitronů ----------
+// stejné mapování jako pinMap ve firmwaru: [digitron][číslice] = výstup driveru (bit)
+const PM=[[21,22,23,24,25,26,27,28,29,30],[11,12,13,14,15,16,17,18,19,20],[0,1,2,3,4,5,6,7,8,9],
+          [31,30,29,28,27,26,25,24,23,22],[11,12,13,14,15,16,17,18,19,20],[0,1,2,3,4,5,6,7,8,9]];
+const testPost=(cmd)=>post("/api/test",{cmd}).then(()=>setTimeout(poll,200));
+$("bTDig").onclick=e=>act(e.target,()=>testPost("digits"));
+$("bTOut").onclick=e=>act(e.target,()=>testPost("outputs"));
+$("bTPrev").onclick=e=>act(e.target,()=>testPost("prev"));
+$("bTNext").onclick=e=>act(e.target,()=>testPost("next"));
+$("bTPause").onclick=e=>act(e.target,()=>testPost(st.test.paused?"resume":"pause"));
+$("bTStop").onclick=e=>act(e.target,()=>testPost("stop"),"Test ukončen");
+function renderTest(){
+  const t=st.test||{mode:0}, on=t.mode>0;
+  $("testRun").hidden=!on;
+  if(!on) return;
+  $("testBox").open=true;
+  let txt;
+  if(t.mode===1) txt=`všechny digitrony: <b>${t.idx}</b>`;
+  else{
+    const drv=t.idx<32?0:1, bit=t.idx%32, exp=[];
+    for(let i=drv*3;i<drv*3+3;i++){const d=PM[i].indexOf(bit);if(d>=0)exp.push(`digitron ${i+1}, číslice ${d}`)}
+    txt=`driver digitronů ${drv?"4–6":"1–3"} · <b>výstup ${bit}</b> (HVOut${bit+1})<br><small>firmware čeká: ${exp.join(" / ")||"nepoužitý výstup"}</small>`;
+  }
+  $("testInfo").innerHTML=txt+`<br><small>${t.idx+1} / ${t.mode===1?10:64}${t.paused?" · pauza":""}</small>`;
+  $("bTPause").textContent=t.paused?"Pokračovat":"Pauza";
+}
+setInterval(()=>{if((st.scan&&st.scan.phase)||(st.test&&st.test.mode))poll()},600);   // během hledání častěji
 
 loadCfg().catch(()=>toast("Nepodařilo se načíst nastavení",true));
 poll();

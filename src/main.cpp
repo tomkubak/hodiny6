@@ -43,7 +43,7 @@
 #error "V platformio.ini musi byt build_flags = -DELEGANTOTA_USE_ASYNC_WEBSERVER=1"
 #endif
 
-#define FW_VERSION "2.5.1"
+#define FW_VERSION "2.6.0"
 
 // ============ HARDWARE ============
 #define SDA_PIN 8
@@ -404,15 +404,19 @@ namespace disp {
     }
   }
 
-  // Pošle snímek, pokud se změnil, nebo pokud uplynul čas obnovení.
-  void show(const int8_t d[6], bool force = false) {
-    uint32_t f1, f2;
-    build(d, f1, f2);
+  // Pošle snímek (f1 = driver digitronů 1–3, f2 = 4–6), pokud se změnil, nebo pokud uplynul čas obnovení.
+  void showRaw(uint32_t f1, uint32_t f2, bool force = false) {
     uint32_t now = millis();
     if (!force && hasFrame && f1 == lastF1 && f2 == lastF2 &&
         now - lastSendMs < DISPLAY_REFRESH_MS) return;
     sendFrames(f1, f2);
     lastF1 = f1; lastF2 = f2; lastSendMs = now; hasFrame = true;
+  }
+
+  void show(const int8_t d[6], bool force = false) {
+    uint32_t f1, f2;
+    build(d, f1, f2);
+    showRaw(f1, f2, force);
   }
 
   void blank() {
@@ -1270,11 +1274,25 @@ static bool scanPhase(uint8_t ph) {
   return true;
 }
 
+// stav testu digitronů (viz TEST DIGITRONŮ níž)
+enum TestMode : uint8_t { TM_OFF = 0, TM_DIGITS, TM_OUTPUTS };
+enum TestCmd : uint8_t { TC_NONE = 0, TC_DIGITS, TC_OUTPUTS, TC_NEXT, TC_PREV, TC_PAUSE, TC_RESUME, TC_STOP };
+static constexpr uint32_t TEST_IDLE_MS = 30UL * 60 * 1000;   // samo skončí po 30 min bez povelu
+
+struct TestState {
+  uint8_t  mode = TM_OFF;
+  bool     paused = false;
+  uint8_t  idx = 0;
+  uint32_t lastMs = 0, cmdMs = 0;
+} test;
+volatile uint8_t reqTestCmd = TC_NONE;
+
 void scanCommand(uint8_t cmd) {
   const uint32_t now = millis();
   scan.cmdMs = now;
   if (cmd == SC_START) {
     if (scan.phase) scanEnd(cur);                  // nové hledání = čistý start
+    test.mode = TM_OFF;
     fx.active = false;
     pwmDetach();
     const uint8_t ph = reqScanPhase == SP_OE || reqScanPhase == SP_STR ? reqScanPhase : SP_CLK;
@@ -1342,6 +1360,55 @@ void scanLoop() {
   const uint32_t every = scan.phase == SP_STR ? SCAN_STR_MS : SCAN_REFRESH_MS;
   if (!scan.frameMs || now - scan.frameMs >= every) { scanFrame(); scan.frameMs = now | 1; }
   if (scan.phase == SP_OE) digitalWrite(scan.oe, (now / 250) % 2 ? HIGH : LOW);
+}
+
+// =====================================================================
+//  TEST DIGITRONŮ
+// =====================================================================
+// TM_DIGITS: všechny digitrony ukazují stejnou číslici 0–9.
+// TM_OUTPUTS: svítí jediný výstup driverů 0–63 (0–31 driver digitronů 1–3, 32–63 driver 4–6)
+//             – ukáže, kam který výstup na desce vede.
+
+static uint8_t testCount() { return test.mode == TM_OUTPUTS ? 64 : 10; }
+static uint32_t testStepMs() { return test.mode == TM_OUTPUTS ? 1500 : 1000; }
+
+void testCommand(uint8_t cmd) {
+  const uint32_t now = millis();
+  test.cmdMs = now;
+  if (cmd == TC_DIGITS || cmd == TC_OUTPUTS) {
+    if (scan.phase) scanEnd(cur);
+    fx.active = false;
+    test.mode = cmd == TC_DIGITS ? TM_DIGITS : TM_OUTPUTS;
+    test.idx = 0; test.paused = false; test.lastMs = now;
+  } else if (!test.mode) {
+    return;
+  } else if (cmd == TC_STOP) {
+    test.mode = TM_OFF;
+  } else if (cmd == TC_NEXT || cmd == TC_PREV) {
+    const uint8_t n = testCount();
+    test.idx = cmd == TC_NEXT ? (test.idx + 1) % n : (test.idx + n - 1) % n;
+    test.lastMs = now;
+  } else if (cmd == TC_PAUSE || cmd == TC_RESUME) {
+    test.paused = cmd == TC_PAUSE;
+    test.lastMs = now;
+  }
+  disp::hasFrame = false;                          // snímek hned
+}
+
+void testLoop() {
+  const uint32_t now = millis();
+  if (now - test.cmdMs > TEST_IDLE_MS) { test.mode = TM_OFF; disp::hasFrame = false; return; }
+  if (!test.paused && now - test.lastMs >= testStepMs()) {
+    test.idx = (test.idx + 1) % testCount();
+    test.lastMs = now;
+  }
+  if (test.mode == TM_DIGITS) {
+    int8_t d[6];
+    for (int i = 0; i < 6; i++) d[i] = test.idx;
+    disp::show(d);
+  } else {
+    disp::showRaw(test.idx < 32 ? 1UL << test.idx : 0, test.idx >= 32 ? 1UL << (test.idx - 32) : 0);
+  }
 }
 
 static int pinJ(uint8_t p) { return p == PIN_NONE ? -1 : p; }
@@ -1435,6 +1502,10 @@ String statusJson() {
   j += ",\"build\":\"" __DATE__ " " __TIME__ "\"";
   j += ",\"reset\":\""; j += resetReasonStr();
   j += "\",\"ota\":"; j += otaActive ? "true" : "false";
+  j += ",\"test\":{\"mode\":"; j += test.mode;
+  j += ",\"idx\":"; j += test.idx;
+  j += ",\"paused\":"; j += test.paused ? "true" : "false";
+  j += "}";
   j += ",\"scan\":{\"phase\":"; j += scan.phase;
   j += ",\"paused\":"; j += scan.paused ? "true" : "false";
   j += ",\"idx\":"; j += scan.idx;
@@ -1696,6 +1767,17 @@ void setupWeb() {
     r->send(200, "application/json", "{\"ok\":true}");
   });
 
+  server.on("/api/test", HTTP_POST, [](AsyncWebServerRequest* r) {
+    String c;
+    argStr(r, "cmd", c);
+    const uint8_t cmd = c == "digits" ? TC_DIGITS : c == "outputs" ? TC_OUTPUTS : c == "next" ? TC_NEXT
+                      : c == "prev" ? TC_PREV : c == "pause" ? TC_PAUSE : c == "resume" ? TC_RESUME
+                      : c == "stop" ? TC_STOP : TC_NONE;
+    if (cmd == TC_NONE) { r->send(400, "text/plain; charset=utf-8", "Neznámý povel"); return; }
+    reqTestCmd = cmd;
+    r->send(200, "application/json", "{\"ok\":true}");
+  });
+
   server.on("/api/pinscan", HTTP_POST, [](AsyncWebServerRequest* r) {
     String c;
     if (!argStr(r, "cmd", c)) { r->send(400, "text/plain", "cmd?"); return; }
@@ -1851,6 +1933,7 @@ void handleRequests() {
   if (reqClean) { reqClean = false; startCleanAnim(reqCleanFx); }
 
   if (reqScanCmd != SC_NONE) { const uint8_t c = reqScanCmd; reqScanCmd = SC_NONE; scanCommand(c); }
+  if (reqTestCmd != TC_NONE) { const uint8_t c = reqTestCmd; reqTestCmd = TC_NONE; testCommand(c); }
 
   if (reqScan) {
     reqScan = false;
@@ -1939,7 +2022,7 @@ void updateOutputs() {
   // jas a VN zdroj
   uint8_t b = cur.bright;
   bool hv = true;
-  if (otaActive || deepActive) {
+  if (otaActive || deepActive || test.mode) {
     b = max<uint8_t>(cur.bright, 30);
   } else if (nightActive) {
     b = cur.nightBright;
@@ -2007,6 +2090,8 @@ void loop() {
 
   if (scan.phase) {
     scanLoop();
+  } else if (test.mode) {
+    testLoop();
   } else {
     int8_t d[6];
     composeDisplay(d);

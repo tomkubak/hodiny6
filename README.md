@@ -81,6 +81,16 @@ Pin VN zdroje průvodce hledáním zapojení nikdy nezkouší.
 - **STR** – když je zapojený, bity se nasunou a jeden pulz je převezme na výstupy najednou
   (nic neproblikne). Polarita *STR aktivní v HIGH / LOW* podle toho, jestli vede přes tranzistor.
 
+### Test digitronů
+
+**Zapojení desky → Test digitronů**:
+
+- **Všechny číslice 0–9** – všechny digitrony ukazují postupně stejnou číslici.
+- **Výstupy driverů** – svítí vždy jen jeden výstup HV5222 (0–31 driver digitronů 1–3, 32–63 driver 4–6).
+  Stránka ukáže číslo výstupu a kterou číslici na něm firmware čeká – tak se najde, kam který výstup vede.
+
+Pauza / Zpět / Další jde i ručně, test sám skončí po 30 minutách.
+
 ### Průvodce „Hledat zapojení“
 
 Když nevíš, na kterých pinech co je: **Zapojení desky → Hledat zapojení**. Hodiny postupně zkoušejí
