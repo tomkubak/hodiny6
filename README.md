@@ -4,7 +4,7 @@ Projekt na EasyEDA (schéma a plošňák): <https://oshwlab.com/tomkubak/6nixie>
 
 ### Seznam součástek
 
-| Součástka | Ks | Poznámka |
+|  | Ks | Poznámka |
 |---|---|---|
 | R 0805 18k | 6× | |
 | R 0805 10k | 4× | |
@@ -18,7 +18,7 @@ Projekt na EasyEDA (schéma a plošňák): <https://oshwlab.com/tomkubak/6nixie>
 
 Volitelně pro provoz bez internetu:
 
-| Součástka | Ks |
+|  | Ks |
 |---|---|
 | DS3231 | 1× |
 | 4k7 | 2× |
