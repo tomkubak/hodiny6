@@ -1,28 +1,32 @@
 # Digitronové hodiny – 6 digitronů
 
-projekt na easyeda: https://oshwlab.com/tomkubak/6nixie         schema a plosnak. 
+Projekt na EasyEDA (schéma a plošňák): <https://oshwlab.com/tomkubak/6nixie>
 
-Seznam soucastek;
-R 0805 18k            6x
-R 0805 10k            4x
-R 0805 2k2            4x
-C 1206 100nF/25V
-BC817 SOT23           4x
-HV5222                2x aliexpress 
-step-up 5V-12V        1x aliexpress https://bit.ly/4iRAGcT
-step-up 12V-220V      1x aliexpress https://bit.ly/48WsiUZ        pozn.: zluty drat na GPIO 4 (SHDN) 
-ESP32-C3 supermini    1x 
+### Seznam součástek
 
+| Součástka | Ks | Poznámka |
+|---|---|---|
+| R 0805 18k | 6× | |
+| R 0805 10k | 4× | |
+| R 0805 2k2 | 4× | |
+| C 1206 100nF/25V | | |
+| BC817 SOT23 | 4× | |
+| HV5222 | 2× | AliExpress |
+| step-up 5V-12V | 1× | [AliExpress](https://bit.ly/4iRAGcT) |
+| step-up 12V-220V | 1× | [AliExpress](https://bit.ly/48WsiUZ) – pozn.: žlutý drát na GPIO 4 (SHDN) |
+| ESP32-C3 supermini | 1× | |
 
-Volitelne pro provoz bez internetu:
-DS3231                1x 
-4k7                   2x
-CR2032
+Volitelně pro provoz bez internetu:
 
+| Součástka | Ks |
+|---|---|
+| DS3231 | 1× |
+| 4k7 | 2× |
+| CR2032 | |
 
+---
 
-
-AI slop:  ↓
+AI slop: ↓
 
 Firmware pro digitronové (nixie) hodiny se šesti digitrony (HH:MM:SS), dvěma drivery **HV5222**
 a deskou **ESP32-C3 SuperMini**. Ovládání je přes webovou stránku v telefonu, čas z internetu (NTP)
