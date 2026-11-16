@@ -1,5 +1,7 @@
 # Digitronové hodiny – 6 digitronů
 
+projekt na easyeda: https://oshwlab.com/tomkubak/6nixie
+
 Firmware pro digitronové (nixie) hodiny se šesti digitrony (HH:MM:SS), dvěma drivery **HV5222**
 a deskou **ESP32-C3 SuperMini**. Ovládání je přes webovou stránku v telefonu, čas z internetu (NTP)
 a volitelně z obvodu RTC DS3231.
