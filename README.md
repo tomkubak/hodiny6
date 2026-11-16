@@ -12,8 +12,8 @@ Projekt na EasyEDA (schéma a plošňák): <https://oshwlab.com/tomkubak/6nixie>
 | C 1206 100nF/25V | 2x | |
 | BC817 SOT23 | 4× | |
 | HV5222 | 2× | AliExpress |
-| step-up 5V-12V | 1× | [AliExpress](https://bit.ly/4iRAGcT) |
-| step-up 12V-220V | 1× | [AliExpress](https://bit.ly/48WsiUZ) – pozn.: žlutý drát na GPIO 4 (SHDN) |
+| step-up 5V-12V | 1× | [AliExpress](https://www.aliexpress.com/item/1005012613587292.html) |
+| step-up 12V-220V | 1× | [AliExpress](https://www.aliexpress.com/item/1005005142595672.html) – pozn.: žlutý drát na GPIO 4 (SHDN) |
 | ESP32-C3 supermini | 1× | |
 
 Volitelně pro provoz bez internetu:
