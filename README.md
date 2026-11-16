@@ -9,7 +9,7 @@ Projekt na EasyEDA (schéma a plošňák): <https://oshwlab.com/tomkubak/6nixie>
 | R 0805 18k | 6× | |
 | R 0805 10k | 4× | |
 | R 0805 2k2 | 4× | |
-| C 1206 100nF/25V | | |
+| C 1206 100nF/25V | 2x | |
 | BC817 SOT23 | 4× | |
 | HV5222 | 2× | AliExpress |
 | step-up 5V-12V | 1× | [AliExpress](https://bit.ly/4iRAGcT) |
