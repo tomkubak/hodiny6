@@ -43,7 +43,7 @@
 #error "V platformio.ini musi byt build_flags = -DELEGANTOTA_USE_ASYNC_WEBSERVER=1"
 #endif
 
-#define FW_VERSION "2.6.0"
+#define FW_VERSION "2.6.1"
 
 // ============ HARDWARE ============
 #define SDA_PIN 8
@@ -55,7 +55,8 @@ static constexpr uint8_t DEF_PIN_CLK  = 1;
 static constexpr uint8_t DEF_PIN_DIN1 = 3;     // driver digitronů 1–3
 static constexpr uint8_t DEF_PIN_DIN2 = 2;     // driver digitronů 4–6 (jen paralelně)
 static constexpr uint8_t DEF_PIN_OE   = 0;
-static constexpr uint8_t DEF_PIN_PWR  = 7;     // VN zdroj (výchozí HIGH = zapnutý)
+static constexpr uint8_t DEF_PIN_PWR  = 4;     // VN zdroj, SHDN step-upu (výchozí LOW = zapnutý)
+static constexpr uint8_t DEF_PIN_STR  = 2;     // STR (latch), výchozí aktivní v LOW
 static constexpr uint8_t PIN_NONE     = 0xFF;  // nezapojeno
 
 // GPIO vyvedené na ESP32-C3 SuperMini, které smí displej a VN zdroj použít.
@@ -147,26 +148,26 @@ struct Settings {
   bool     nightHvOff = false;
   // čištění katod
   uint8_t  cleanMode = 1;          // 0 vyp, 1 každou minutu, 2 každých 10 min, 3 každou hodinu
-  uint8_t  cleanFx = 0;            // efekt čištění, 10 = náhodný
+  uint8_t  cleanFx = 10;           // efekt čištění, 10 = náhodný
   bool     deepOn = true;
   uint8_t  deepHour = 3;
   uint8_t  deepMinutes = 5;
   // síť a systém
   String   hostname = "hodiny";
   uint8_t  txPower = 60;           // 0,25 dBm jednotky (60 = 15 dBm)
-  uint8_t  srPulse = 10;           // délka CLK pulzu v µs (s 1k pull-upy stačí 10)
+  uint8_t  srPulse = 8;            // délka CLK pulzu v µs
   bool     srBlank = true;         // zhasnout přes OE během přenosu
   // zapojení desky
   uint8_t  pinClk  = DEF_PIN_CLK;
   uint8_t  pinDin1 = DEF_PIN_DIN1;
   uint8_t  pinDin2 = DEF_PIN_DIN2;
   uint8_t  pinOe   = DEF_PIN_OE;   // PIN_NONE = nezapojené
-  uint8_t  chain   = CHAIN_PARALLEL;
+  uint8_t  chain   = CHAIN_SERIAL;
   uint8_t  chainFirst = 0;         // do série: 1. driver za ESP řídí digitrony 1–3 (0) nebo 4–6 (1)
-  uint8_t  pinStr  = PIN_NONE;     // STR (latch), PIN_NONE = nezapojený
-  bool     strHigh = true;         // aktivní (propustná) úroveň STR na pinu ESP: HIGH / LOW
+  uint8_t  pinStr  = DEF_PIN_STR;  // STR (latch), PIN_NONE = nezapojený
+  bool     strHigh = false;        // aktivní (propustná) úroveň STR na pinu ESP: HIGH / LOW
   uint8_t  pinPwr  = DEF_PIN_PWR;  // VN zdroj, PIN_NONE = nezapojený
-  bool     pwrHigh = true;         // úroveň, která VN zdroj zapíná: HIGH / LOW
+  bool     pwrHigh = false;        // úroveň, která VN zdroj zapíná: HIGH / LOW
   bool     rtcOn   = true;         // osazený DS3231 (změna platí po restartu)
   String   otaUser = "";
   String   otaPass = "";
@@ -539,8 +540,10 @@ void loadSettings() {
   s.chainFirst  = s.chainFirst ? 1 : 0;
   i2cBusy = s.rtcOn;                       // volí se jen při startu
   if (!pinsValid(s.pinClk, s.pinDin1, s.pinDin2, s.pinOe, s.pinStr, s.pinPwr, s.chain)) {
-    s.pinClk = DEF_PIN_CLK; s.pinDin1 = DEF_PIN_DIN1; s.pinDin2 = DEF_PIN_DIN2; s.pinOe = DEF_PIN_OE;
-    s.pinStr = PIN_NONE; s.pinPwr = DEF_PIN_PWR; s.chain = CHAIN_PARALLEL;
+    const Settings d;
+    s.pinClk = d.pinClk; s.pinDin1 = d.pinDin1; s.pinDin2 = d.pinDin2; s.pinOe = d.pinOe;
+    s.pinStr = d.pinStr; s.strHigh = d.strHigh; s.pinPwr = d.pinPwr; s.pwrHigh = d.pwrHigh;
+    s.chain = d.chain; s.chainFirst = d.chainFirst;
   }
 
   CfgLock l;

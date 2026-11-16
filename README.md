@@ -83,18 +83,38 @@ Nastavení i Wi-Fi zůstanou.
 3. Po připojení ukážou na digitronech svou IP adresu. Stránka pak běží na
    `http://hodiny.local` nebo na té IP adrese.
 
+## Výchozí nastavení
+
+Platí po prvním nahrání `_full.bin` i po továrním nastavení (fw 2.6.1):
+
+| Oblast | Výchozí hodnota |
+|---|---|
+| Wi-Fi | žádná uložená → otevřená síť `hodiny`, stránka na `http://192.168.4.1` |
+| Název v síti | `hodiny` (`http://hodiny.local`) |
+| NTP | `cz.pool.ntp.org`, `tik.cesnet.cz`, synchronizace každých 6 h |
+| Časové pásmo | Praha (SEČ / SELČ, automatický letní čas) |
+| Jas | 60 % |
+| Úvodní nula / datum | nula se zobrazuje, datum vypnuté |
+| Noční režim | vypnutý (po zapnutí 23:00–6:00, jas 10 %, VN zůstává zapnutý) |
+| Rychlé protočení číslic | každou minutu, náhodný efekt |
+| Denní hloubkové čištění | zapnuté, začátek ve 3 h, délka 5 min |
+| Přenos do registrů | délka hodinového pulzu 8 µs, zhasnout během přenosu zapnuto |
+| Vysílací výkon Wi-Fi | 15 dBm |
+| RTC DS3231 | zapnuté |
+| Heslo pro aktualizace | žádné |
+
 ## Zapojení
 
 Výchozí zapojení (platí i po továrním nastavení):
 
 | Signál | GPIO | Poznámka |
 |---|---|---|
+| Drivery | – | výchozí do série (DIN → DOUT → DIN), první driver za ESP řídí digitrony 1–3 |
 | CLK | 1 | přes invertující tranzistor |
-| DIN1 | 3 | driver digitronů 1–3 |
-| DIN2 | 2 | driver digitronů 4–6 (jen paralelně) |
+| DIN | 3 | vstup prvního driveru |
 | OE (jas) | 0 | PWM, přes invertující tranzistor |
-| STR (latch) | – | volitelný, výchozí nezapojený |
-| VN zdroj | 7 | volitelný pin (i „nezapojeno“) i polarita, výchozí HIGH = zapnutý |
+| STR (latch) | 2 | aktivní v LOW (volitelný, jde i „nezapojeno“) |
+| VN zdroj | 4 | SHDN step-upu 12V-220V (žlutý drát), zapnutý při LOW |
 | RTC SDA / SCL | 8 / 9 | DS3231 (pevné; bez RTC volné pro displej) |
 
 Piny displeje i VN zdroje jdou změnit v kartě **Zapojení desky** (GPIO 0–7, 10, 20, 21; bez RTC i 8 a 9).
@@ -154,4 +174,4 @@ Zdrojáky: `src/main.cpp` (firmware), `src/web_ui.h` (webová stránka), `src/ic
 ## API
 
 Stránka používá jednoduché JSON API – `GET /api/status`, `GET/POST /api/config`, `POST /api/settime`,
-`/api/ntpsync`, `/api/clean`, `/api/pinscan`, `/api/wifi`, `GET /api/scan`, `/api/restart`, `/api/factory`.
+`/api/ntpsync`, `/api/clean`, `/api/test`, `/api/pinscan`, `/api/wifi`, `GET /api/scan`, `/api/restart`, `/api/factory`.
