@@ -80,12 +80,13 @@ Nastavení i Wi-Fi zůstanou.
 1. Hodiny po startu vytvoří otevřenou Wi-Fi **`hodiny`**. Připoj se k ní telefonem,
    stránka se otevře sama (jinak `http://192.168.4.1`).
 2. V kartě **WiFi** vyber domácí síť a zadej heslo. Hodiny se restartují a připojí.
-3. Po připojení ukážou na digitronech svou IP adresu. Stránka pak běží na
+3. Po připojení ukážou na digitronech svou IP adresu (nejdřív 1. a 2. číslo, pak 3. a 4.;
+   poslední číslo začíná vždy na 4. digitronu). Stránka pak běží na
    `http://hodiny.local` nebo na té IP adrese.
 
 ## Výchozí nastavení
 
-Platí po prvním nahrání `_full.bin` i po továrním nastavení (fw 2.6.1):
+Platí po prvním nahrání `_full.bin` i po továrním nastavení (fw 2.6.2):
 
 | Oblast | Výchozí hodnota |
 |---|---|
@@ -113,7 +114,7 @@ Výchozí zapojení (platí i po továrním nastavení):
 | CLK | 1 | přes invertující tranzistor |
 | DIN | 3 | vstup prvního driveru |
 | OE (jas) | 0 | PWM, přes invertující tranzistor |
-| STR (latch) | 2 | aktivní v LOW (volitelný, jde i „nezapojeno“) |
+| STR (latch) | 2 | aktivní v HIGH (volitelný, jde i „nezapojeno“) |
 | VN zdroj | 4 | SHDN step-upu 12V-220V (žlutý drát), zapnutý při LOW |
 | RTC SDA / SCL | 8 / 9 | DS3231 (pevné; bez RTC volné pro displej) |
 

@@ -43,7 +43,7 @@
 #error "V platformio.ini musi byt build_flags = -DELEGANTOTA_USE_ASYNC_WEBSERVER=1"
 #endif
 
-#define FW_VERSION "2.6.1"
+#define FW_VERSION "2.6.2"
 
 // ============ HARDWARE ============
 #define SDA_PIN 8
@@ -56,7 +56,7 @@ static constexpr uint8_t DEF_PIN_DIN1 = 3;     // driver digitronů 1–3
 static constexpr uint8_t DEF_PIN_DIN2 = 2;     // driver digitronů 4–6 (jen paralelně)
 static constexpr uint8_t DEF_PIN_OE   = 0;
 static constexpr uint8_t DEF_PIN_PWR  = 4;     // VN zdroj, SHDN step-upu (výchozí LOW = zapnutý)
-static constexpr uint8_t DEF_PIN_STR  = 2;     // STR (latch), výchozí aktivní v LOW
+static constexpr uint8_t DEF_PIN_STR  = 2;     // STR (latch), výchozí aktivní v HIGH
 static constexpr uint8_t PIN_NONE     = 0xFF;  // nezapojeno
 
 // GPIO vyvedené na ESP32-C3 SuperMini, které smí displej a VN zdroj použít.
@@ -165,7 +165,7 @@ struct Settings {
   uint8_t  chain   = CHAIN_SERIAL;
   uint8_t  chainFirst = 0;         // do série: 1. driver za ESP řídí digitrony 1–3 (0) nebo 4–6 (1)
   uint8_t  pinStr  = DEF_PIN_STR;  // STR (latch), PIN_NONE = nezapojený
-  bool     strHigh = false;        // aktivní (propustná) úroveň STR na pinu ESP: HIGH / LOW
+  bool     strHigh = true;         // aktivní (propustná) úroveň STR na pinu ESP: HIGH / LOW
   uint8_t  pinPwr  = DEF_PIN_PWR;  // VN zdroj, PIN_NONE = nezapojený
   bool     pwrHigh = false;        // úroveň, která VN zdroj zapíná: HIGH / LOW
   bool     rtcOn   = true;         // osazený DS3231 (změna platí po restartu)
@@ -1092,6 +1092,10 @@ void composeDisplay(int8_t d[6]) {
       int a = bootSeq.ipPart == 0 ? 0 : 2;
       split3(bootSeq.ip[a], d);
       split3(bootSeq.ip[a + 1], d + 3);
+      if (a == 2) {                            // poslední oktet zarovnat doleva od D4
+        int8_t* o = d + 3;
+        while (o[0] < 0) { o[0] = o[1]; o[1] = o[2]; o[2] = -1; }
+      }
       return;
     }
   }
