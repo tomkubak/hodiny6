@@ -43,7 +43,7 @@
 #error "V platformio.ini musi byt build_flags = -DELEGANTOTA_USE_ASYNC_WEBSERVER=1"
 #endif
 
-#define FW_VERSION "2.6.2"
+#define FW_VERSION "2.6.3"
 
 // ============ HARDWARE ============
 #define SDA_PIN 8
@@ -1092,10 +1092,6 @@ void composeDisplay(int8_t d[6]) {
       int a = bootSeq.ipPart == 0 ? 0 : 2;
       split3(bootSeq.ip[a], d);
       split3(bootSeq.ip[a + 1], d + 3);
-      if (a == 2) {                            // poslední oktet zarovnat doleva od D4
-        int8_t* o = d + 3;
-        while (o[0] < 0) { o[0] = o[1]; o[1] = o[2]; o[2] = -1; }
-      }
       return;
     }
   }
